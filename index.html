@@ -856,6 +856,15 @@ footer {
     </div>
 </div>
 
+<!-- PostHog -->
+<script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags resetGroups onFeatureFlags addFeatureFlagsHandler onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_Al0VuJC1a28YVdkhsPY18CKB0jYZPbud7kJLNRJo4FL', {
+        api_host: 'https://us.i.posthog.com',
+        defaults: '2026-01-30'
+    })
+</script>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ==========================================
@@ -926,6 +935,35 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
 
 // ==========================================
+// SECTION TRACKING — fire once per section viewed
+// ==========================================
+var trackedSections = {};
+var sectionMap = {
+    'story': document.querySelector('.story'),
+    'how_it_works': document.querySelector('#how-it-works'),
+    'screenshots': document.querySelector('#screenshots'),
+    'final_cta': document.querySelector('.final-cta')
+};
+
+var sectionObserver = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        var name = entry.target.dataset.section;
+        if (name && !trackedSections[name]) {
+            trackedSections[name] = true;
+            posthog.capture('section_viewed', { section: name });
+        }
+    });
+}, { threshold: 0.3 });
+
+Object.keys(sectionMap).forEach(function(name) {
+    if (sectionMap[name]) {
+        sectionMap[name].dataset.section = name;
+        sectionObserver.observe(sectionMap[name]);
+    }
+});
+
+// ==========================================
 // NAV REVEAL — slide down when hero CTA leaves viewport
 // ==========================================
 const navEl = document.querySelector('nav');
@@ -957,14 +995,26 @@ function openSignup(event) {
     event.preventDefault();
     if (!isValidDomain()) return;
     formOpenTime = Date.now();
+
+    // Track which CTA was clicked
+    var btn = event.currentTarget;
+    var location = 'unknown';
+    if (btn.closest('.hero-cta')) location = 'hero';
+    else if (btn.closest('nav')) location = 'nav';
+    else if (btn.closest('.final-cta')) location = 'final_cta';
+    posthog.capture('cta_clicked', { location: location });
+
+    posthog.capture('signup_modal_opened');
     document.getElementById('signupModal').classList.add('show');
     document.body.style.overflow = 'hidden';
 }
 
 function closeSignup(event) {
     if (event && event.target !== event.currentTarget && !event.target.closest('button')) return;
+    var wasVisible = document.getElementById('signupModal').classList.contains('show');
     document.getElementById('signupModal').classList.remove('show');
     document.body.style.overflow = '';
+    if (wasVisible) posthog.capture('signup_modal_closed');
 }
 
 document.addEventListener('keydown', function(e) {
@@ -1007,11 +1057,13 @@ document.getElementById('signupForm').addEventListener('submit', async function(
 
         this.reset();
         showToast("You're on the list!");
+        posthog.capture('signup_submitted', { result: 'success' });
         deactivateCTAs();
         closeSignup();
 
     } catch (error) {
         showToast('Submission failed \u2014 please try again.', true);
+        posthog.capture('signup_submitted', { result: 'error', error: error.toString() });
     } finally {
         resetBtn(btn, text, spinner);
     }
