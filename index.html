@@ -845,6 +845,12 @@ footer {
             <input type="hidden" name="timestamp" value=""/>
             <input type="hidden" name="session_id" value=""/>
             <input type="hidden" name="token" value=""/>
+            <!-- UTM attribution -->
+            <input type="hidden" name="utm_source" value=""/>
+            <input type="hidden" name="utm_medium" value=""/>
+            <input type="hidden" name="utm_campaign" value=""/>
+            <input type="hidden" name="utm_term" value=""/>
+            <input type="hidden" name="utm_content" value=""/>
 
             <button type="submit" id="submitBtn" class="btn btn-red form-submit">
                 <span class="submit-text">Join the Waitlist</span>
@@ -863,6 +869,19 @@ footer {
         api_host: 'https://us.i.posthog.com',
         defaults: '2026-01-30'
     })
+
+    // UTM attribution — parse once, register as persistent person properties
+    var defined_utmParams = {};
+    var defined_utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    var urlParams = new URLSearchParams(window.location.search);
+    defined_utmKeys.forEach(function(key) {
+        var val = urlParams.get(key);
+        if (val) defined_utmParams[key] = val;
+    });
+    if (Object.keys(defined_utmParams).length > 0) {
+        posthog.register(defined_utmParams);
+        posthog.setPersonPropertiesForFlags(defined_utmParams);
+    }
 </script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1041,6 +1060,12 @@ document.getElementById('signupForm').addEventListener('submit', async function(
     this.timestamp.value = Date.now();
     this.session_id.value = sessionId;
     this.token.value = formToken;
+    // Pass UTM params to Google Sheet
+    defined_utmKeys.forEach(function(key) {
+        if (document.querySelector('input[name="' + key + '"]')) {
+            document.querySelector('input[name="' + key + '"]').value = defined_utmParams[key] || '';
+        }
+    });
 
     if (!performAntiSpoofingChecks()) {
         showToast('Security check failed. Please try again.', true);
