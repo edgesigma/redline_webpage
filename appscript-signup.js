@@ -6,6 +6,7 @@
  * - Appends a row to the "Waitlist" sheet
  * - Sends an autoresponder welcome email via Gmail "Send as" alias
  * - Emails you an alert for new submissions (rate-limited)
+ * - Sends a SignUp conversion event to Reddit CAPI (if rdt_cid present)
  * - Returns plain-text "OK"
  *
  * Activation:
@@ -15,6 +16,8 @@
  *   Gmail Settings > Accounts > Send mail as > Add another address
  *   SMTP: mail.privateemail.com, port 465, SSL
  *   Username: maurice@getredlineapp.com
+ * - Set REDDIT_PIXEL_ID and REDDIT_CAPI_TOKEN in Script Properties
+ *   (Project Settings > Script Properties).
  */
 
 /** CONFIG **/
@@ -77,6 +80,7 @@ function doPost(e) {
     var utmCampaign = (params.utm_campaign || '').trim();
     var utmTerm    = (params.utm_term     || '').trim();
     var utmContent = (params.utm_content  || '').trim();
+    var rdtCid     = (params.rdt_cid      || '').trim();
 
     // Check for duplicate email
     if (email) {
@@ -104,12 +108,18 @@ function doPost(e) {
       utmMedium,
       utmCampaign,
       utmTerm,
-      utmContent
+      utmContent,
+      rdtCid
     ]);
 
     // Autoresponder via Gmail (once per email address)
     if (email) {
       sendAutoresponder_(email, name);
+    }
+
+    // Reddit CAPI conversion event
+    if (rdtCid && email) {
+      sendRedditConversion_(email, rdtCid, submittedAt, ua, page);
     }
 
     // Email alert (rate-limited per email)
@@ -134,7 +144,8 @@ function doPost(e) {
             'UA: ' + ua + '\n' +
             (utmSource ? 'UTM Source: ' + utmSource + '\n' : '') +
             (utmMedium ? 'UTM Medium: ' + utmMedium + '\n' : '') +
-            (utmCampaign ? 'UTM Campaign: ' + utmCampaign + '\n' : '')
+            (utmCampaign ? 'UTM Campaign: ' + utmCampaign + '\n' : '') +
+            (rdtCid ? 'Reddit Click ID: ' + rdtCid + '\n' : '')
         });
         props.setProperty(key, String(Date.now()));
       }
@@ -206,6 +217,76 @@ function sendAutoresponder_(email, name) {
   }
 }
 
+/**
+ * Sends a SignUp conversion event to Reddit's Conversions API.
+ * Requires REDDIT_PIXEL_ID and REDDIT_CAPI_TOKEN in Script Properties.
+ */
+function sendRedditConversion_(email, rdtCid, eventTime, ua, pageUrl) {
+  var props = PropertiesService.getScriptProperties();
+  var pixelId = props.getProperty('REDDIT_PIXEL_ID');
+  var capiToken = props.getProperty('REDDIT_CAPI_TOKEN');
+
+  if (!pixelId || !capiToken) {
+    console.error(
+      'REDDIT_PIXEL_ID or REDDIT_CAPI_TOKEN not set in Script Properties'
+    );
+    return;
+  }
+
+  // SHA-256 hash the email (Reddit requires hashed PII)
+  var emailHash = Utilities
+    .computeDigest(Utilities.DigestAlgorithm.SHA_256, email.toLowerCase().trim())
+    .map(function(b) {
+      return ('0' + (b & 0xFF).toString(16)).slice(-2);
+    })
+    .join('');
+
+  var payload = {
+    events: [
+      {
+        event_at: eventTime.toISOString(),
+        event_type: {
+          tracking_type: 'SignUp'
+        },
+        user: {
+          email: emailHash,
+          external_id: emailHash,
+          user_agent: ua || undefined
+        },
+        event_metadata: {
+          conversion_id: 'signup_' + Date.now(),
+          item_count: 1
+        },
+        click_id: rdtCid
+      }
+    ]
+  };
+
+  try {
+    var res = UrlFetchApp.fetch(
+      'https://ads-api.reddit.com/api/v2.0/conversions/events/' + pixelId,
+      {
+        method: 'post',
+        contentType: 'application/json',
+        headers: {
+          'Authorization': 'Bearer ' + capiToken
+        },
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      }
+    );
+
+    var code = res.getResponseCode();
+    if (code < 200 || code >= 300) {
+      console.error(
+        'Reddit CAPI error (' + code + '): ' + res.getContentText()
+      );
+    }
+  } catch (err) {
+    console.error('Reddit CAPI error: ' + err.toString());
+  }
+}
+
 function doGet() {
   return ContentService.createTextOutput('OK')
     .setMimeType(ContentService.MimeType.TEXT);
@@ -213,7 +294,7 @@ function doGet() {
 
 /**
  * RUN THIS ONCE FROM THE EDITOR to grant all required
- * permissions (GmailApp, MailApp, PropertiesService).
+ * permissions (GmailApp, MailApp, UrlFetchApp, PropertiesService).
  * Select this function from the dropdown and click Run.
  */
 function authorizeAll() {
@@ -221,6 +302,15 @@ function authorizeAll() {
   GmailApp.sendEmail(
     NOTIFY_EMAIL,
     'Redline Apps Script authorized',
-    'GmailApp + MailApp scopes granted. Autoresponder is ready.'
+    'GmailApp + MailApp + UrlFetchApp scopes granted.'
   );
+
+  // Triggers UrlFetchApp permission (for Reddit CAPI)
+  UrlFetchApp.fetch('https://ads-api.reddit.com/api/v2.0/conversions/events/test', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer test' },
+    payload: '{}',
+    muteHttpExceptions: true
+  });
 }

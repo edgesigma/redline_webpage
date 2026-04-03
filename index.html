@@ -851,6 +851,8 @@ footer {
             <input type="hidden" name="utm_campaign" value=""/>
             <input type="hidden" name="utm_term" value=""/>
             <input type="hidden" name="utm_content" value=""/>
+            <!-- Reddit click ID -->
+            <input type="hidden" name="rdt_cid" value=""/>
 
             <button type="submit" id="submitBtn" class="btn btn-red form-submit">
                 <span class="submit-text">Join the Waitlist</span>
@@ -882,6 +884,9 @@ footer {
         posthog.register(defined_utmParams);
         posthog.setPersonPropertiesForFlags(defined_utmParams);
     }
+
+    // Reddit click ID — capture from URL for conversion attribution
+    var defined_rdtCid = urlParams.get('rdt_cid') || '';
 </script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -999,7 +1004,7 @@ navObserver.observe(heroCta);
 // ==========================================
 // SIGNUP FORM LOGIC
 // ==========================================
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwWCY0_3zp1cZIvJbOE4ey-B2hD_06mM-tiZSDsrM57G1O6Au7RglbUtsvdZccheU4U/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyKKks6_fPFw0eneFZcay9LL-wde9zhAt73rOR4NQcLHB85ZjdLKGyRL4dVR32XcQgr/exec';
 
 let sessionId = '';
 let formToken = '';
@@ -1066,6 +1071,8 @@ document.getElementById('signupForm').addEventListener('submit', async function(
             document.querySelector('input[name="' + key + '"]').value = defined_utmParams[key] || '';
         }
     });
+    // Pass Reddit click ID
+    this.rdt_cid.value = defined_rdtCid;
 
     if (!performAntiSpoofingChecks()) {
         showToast('Security check failed. Please try again.', true);
