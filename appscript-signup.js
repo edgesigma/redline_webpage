@@ -118,8 +118,8 @@ function doPost(e) {
     }
 
     // Reddit CAPI conversion event
-    if (rdtCid && email) {
-      sendRedditConversion_(email, rdtCid, submittedAt, ua, page);
+    if (email) {
+      sendRedditConversion_(email, submittedAt, ua);
     }
 
     // Email alert (rate-limited per email)
@@ -221,7 +221,7 @@ function sendAutoresponder_(email, name) {
  * Sends a SignUp conversion event to Reddit's Conversions API.
  * Requires REDDIT_PIXEL_ID and REDDIT_CAPI_TOKEN in Script Properties.
  */
-function sendRedditConversion_(email, rdtCid, eventTime, ua, pageUrl) {
+function sendRedditConversion_(email, eventTime, ua) {
   var props = PropertiesService.getScriptProperties();
   var pixelId = props.getProperty('REDDIT_PIXEL_ID');
   var capiToken = props.getProperty('REDDIT_CAPI_TOKEN');
@@ -241,33 +241,23 @@ function sendRedditConversion_(email, rdtCid, eventTime, ua, pageUrl) {
     })
     .join('');
 
-  // Set to a test ID from Reddit Events Manager to verify,
-  // then remove or set to '' for production.
-  var testId = 't2_2am5z2ucnb';
-
-  var event = {
-    event_at: eventTime.toISOString(),
-    event_type: {
-      tracking_type: 'SignUp'
-    },
-    user: {
-      email: emailHash,
-      external_id: emailHash,
-      user_agent: ua || undefined
-    },
-    event_metadata: {
-      conversion_id: 'signup_' + Date.now(),
-      item_count: 1
-    },
-    click_id: rdtCid
-  };
-
-  if (testId) {
-    event.test_id = testId;
-  }
-
   var payload = {
-    events: [event]
+    events: [
+      {
+        event_at: eventTime.toISOString(),
+        event_type: {
+          tracking_type: 'SignUp'
+        },
+        user: {
+          email: emailHash,
+          user_agent: ua || undefined
+        },
+        event_metadata: {
+          conversion_id: 'signup_' + Date.now(),
+          item_count: 1
+        }
+      }
+    ]
   };
 
   try {
