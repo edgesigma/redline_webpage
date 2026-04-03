@@ -241,25 +241,33 @@ function sendRedditConversion_(email, rdtCid, eventTime, ua, pageUrl) {
     })
     .join('');
 
+  // Set to a test ID from Reddit Events Manager to verify,
+  // then remove or set to '' for production.
+  var testId = 't2_2am5z2ucnb';
+
+  var event = {
+    event_at: eventTime.toISOString(),
+    event_type: {
+      tracking_type: 'SignUp'
+    },
+    user: {
+      email: emailHash,
+      external_id: emailHash,
+      user_agent: ua || undefined
+    },
+    event_metadata: {
+      conversion_id: 'signup_' + Date.now(),
+      item_count: 1
+    },
+    click_id: rdtCid
+  };
+
+  if (testId) {
+    event.test_id = testId;
+  }
+
   var payload = {
-    events: [
-      {
-        event_at: eventTime.toISOString(),
-        event_type: {
-          tracking_type: 'SignUp'
-        },
-        user: {
-          email: emailHash,
-          external_id: emailHash,
-          user_agent: ua || undefined
-        },
-        event_metadata: {
-          conversion_id: 'signup_' + Date.now(),
-          item_count: 1
-        },
-        click_id: rdtCid
-      }
-    ]
+    events: [event]
   };
 
   try {
