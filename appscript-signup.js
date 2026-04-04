@@ -253,8 +253,7 @@ function sendRedditConversion_(email, eventTime, ua) {
           user_agent: ua || undefined
         },
         event_metadata: {
-          conversion_id: 'signup_' + Date.now(),
-          item_count: 1
+          conversion_id: 'signup_' + Date.now()
         }
       }
     ]
